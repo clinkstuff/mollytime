@@ -18,7 +18,9 @@ third_party/emsdk
 !subprojects/fmt.wrap
 !subprojects/freetype2.wrap
 !subprojects/glm.wrap
+!subprojects/nanobind.wrap
 !subprojects/pybind11.wrap
+!subprojects/robin-map.wrap
 !subprojects/sdl3_ttf.wrap
 !subprojects/sdl3.wrap
 !subprojects/tracy.wrap

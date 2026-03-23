@@ -19,17 +19,13 @@
 
 #include <fmt/format.h>
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wlanguage-extension-token"
-#pragma clang diagnostic ignored "-Wmissing-field-initializers"
-#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#pragma warning(push)
-#pragma warning(disable : 4191 4355 4371 4464 4686 4868 5039)
-#include <pybind11/pybind11.h>
-#include <pybind11/native_enum.h>
-#include <pybind11/stl.h>
-#pragma warning(pop)
-#pragma clang diagnostic pop
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/array.h>
+#include <nanobind/stl/set.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/string_view.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 
 #include "colors.h"
 #include "patch.h"
@@ -38,7 +34,7 @@
 #include "perf.h"
 #include "sdl.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 using ColorTuple = std::tuple<float, float, float>;
 using ColorArray = std::array<float, 3>;
@@ -55,7 +51,7 @@ static int ColorPointGetItem(ColorPoint& Color, int Index)
 		return std::min(std::max(int(Color.Channels[Index] * 255.0f), 0), 255);
 	}
 
-	throw pybind11::index_error(fmt::format("Index out of range: {}\n", Index));
+	throw nanobind::index_error(fmt::format("Index out of range: {}\n", Index).c_str());
 }
 
 
@@ -110,16 +106,15 @@ static ColorPoint MakeHSL(float H, float S, float L)
 }
 
 
-PYBIND11_MODULE(backend, m) {
+NB_MODULE(backend, m) {
 	m.doc() = "mollytime c++ internals";
 
-	py::native_enum<ColorSpace>(m, "ColorSpace", "enum.Enum")
+	py::enum_<ColorSpace>(m, "ColorSpace", "enum.Enum")
 		.value("sRGB", ColorSpace::sRGB)
 		.value("LinearRGB", ColorSpace::LinearRGB)
 		.value("OkLAB", ColorSpace::OkLAB)
 		.value("OkLCH", ColorSpace::OkLCH)
-		.value("HSL", ColorSpace::HSL)
-		.finalize();
+		.value("HSL", ColorSpace::HSL);
 
 	py::class_<ColorPoint>(m, "ColorPoint")
 		.def(py::init<>())
@@ -128,8 +123,8 @@ PYBIND11_MODULE(backend, m) {
 		.def("__len__", [](const ColorPoint& Self) -> int { return 3; })
 		.def("__getitem__", &ColorPointGetItem)
 		.def("__repr__", &ColorPointRepr)
-		.def_property_readonly("channels", &ColorPointGetChannels)
-		.def_readonly("encoding", &ColorPoint::Encoding)
+		.def_prop_ro("channels", &ColorPointGetChannels)
+		.def_ro("encoding", &ColorPoint::Encoding)
 		.def("encode", &ColorPoint::Encode);
 
 	py::class_<ColorRamp>(m, "ColorRamp")
@@ -145,14 +140,14 @@ PYBIND11_MODULE(backend, m) {
 	m.def("mix_lchab", &MixLCHAB, "Color blending in both OkLCH and OkLAB space");
 
 	m.def("profiling_enabled", &IsProfilingEnabled);
-	m.def("profiling_scope", [](const char* Name, py::function Thunk) -> py::object
+	m.def("profiling_scope", [](const char* Name, std::function<py::object()>& Thunk) -> py::object
 	{
 		py::object Result;
 		PerfTrampoline(Name, Thunk, Result);
 		return Result;
 	});
 
-	py::native_enum<OpCode>(m, "OpCode", "enum.IntEnum")
+	py::enum_<OpCode>(m, "OpCode", py::is_arithmetic {})
 		.value("GO", OpCode::GO)
 		.value("CONST", OpCode::CONST)
 		.value("SCOPE", OpCode::SCOPE)
@@ -217,8 +212,7 @@ PYBIND11_MODULE(backend, m) {
 		.value("TWEAK", OpCode::TWEAK)
 		.value("TAPE_LOOP", OpCode::TAPE_LOOP)
 		.value("MOON", OpCode::MOON)
-		.value("Count", OpCode::Count)
-		.finalize();
+		.value("Count", OpCode::Count);
 
 	m.def("make_port_handle", &MakePortHandle);
 	m.def("decode_port_tile", &PortHandleTilePart);
@@ -228,8 +222,8 @@ PYBIND11_MODULE(backend, m) {
 
 	py::class_<Patch>(m, "Patch")
 		.def(py::init<>())
-		.def_property("midi_lanes", &Patch::GetPolyphony, &Patch::SetPolyphony)
-		.def_readonly("wires", &Patch::Wires)
+		.def_prop_rw("midi_lanes", &Patch::GetPolyphony, &Patch::SetPolyphony)
+		.def_ro("wires", &Patch::Wires)
 		.def("make_tile", [](Patch& Self, OpCode Symbol) -> TileHandle
 		{
 			return Self.MakeTile(Symbol);
@@ -288,24 +282,24 @@ PYBIND11_MODULE(backend, m) {
         .def(py::init<float, float, float, float>())
         .def(py::init<Point, Size>())
         .def("copy", [](const Rect& rect) { return Rect(rect); })
-        .def_readwrite("x", &Rect::X)
-        .def_readwrite("y", &Rect::Y)
-        .def_readwrite("w", &Rect::Width)
-        .def_readwrite("width", &Rect::Width)
-        .def_readwrite("h", &Rect::Height)
-        .def_readwrite("height", &Rect::Height)
-        .def_property("size", &Rect::GetSize, &Rect::SetSize)
-        .def_property("left", &Rect::GetLeft, &Rect::SetLeft)
-        .def_property("right", &Rect::GetRight, &Rect::SetRight)
-        .def_property("top", &Rect::GetTop, &Rect::SetTop)
-        .def_property("bottom", &Rect::GetBottom, &Rect::SetBottom)
-        .def_property("topleft", &Rect::GetTopLeft, &Rect::SetTopLeft)
-        .def_property("topright", &Rect::GetTopRight, &Rect::SetTopRight)
-        .def_property("bottomleft", &Rect::GetBottomLeft, &Rect::SetBottomLeft)
-        .def_property("bottomright", &Rect::GetBottomRight, &Rect::SetBottomRight)
-        .def_property("centerx", &Rect::GetCenterX, &Rect::SetCenterX)
-        .def_property("centery", &Rect::GetCenterY, &Rect::SetCenterY)
-        .def_property("center", &Rect::GetCenter, &Rect::SetCenter)
+        .def_rw("x", &Rect::X)
+        .def_rw("y", &Rect::Y)
+        .def_rw("w", &Rect::Width)
+        .def_rw("width", &Rect::Width)
+        .def_rw("h", &Rect::Height)
+        .def_rw("height", &Rect::Height)
+        .def_prop_rw("size", &Rect::GetSize, &Rect::SetSize)
+        .def_prop_rw("left", &Rect::GetLeft, &Rect::SetLeft)
+        .def_prop_rw("right", &Rect::GetRight, &Rect::SetRight)
+        .def_prop_rw("top", &Rect::GetTop, &Rect::SetTop)
+        .def_prop_rw("bottom", &Rect::GetBottom, &Rect::SetBottom)
+        .def_prop_rw("topleft", &Rect::GetTopLeft, &Rect::SetTopLeft)
+        .def_prop_rw("topright", &Rect::GetTopRight, &Rect::SetTopRight)
+        .def_prop_rw("bottomleft", &Rect::GetBottomLeft, &Rect::SetBottomLeft)
+        .def_prop_rw("bottomright", &Rect::GetBottomRight, &Rect::SetBottomRight)
+        .def_prop_rw("centerx", &Rect::GetCenterX, &Rect::SetCenterX)
+        .def_prop_rw("centery", &Rect::GetCenterY, &Rect::SetCenterY)
+        .def_prop_rw("center", &Rect::GetCenter, &Rect::SetCenter)
         .def("collidepoint", &Rect::ContainsPoint)
         .def("clipline", &Rect::IntersectLine)
         .def("union", &Rect::Union)
@@ -324,7 +318,7 @@ PYBIND11_MODULE(backend, m) {
 
     py::module_ events = m.def_submodule("events");
 
-    py::native_enum<Events::EventType>(events, "Type", "enum.IntEnum")
+    py::enum_<Events::EventType>(events, "Type", "enum.IntEnum")
         .value("QUIT",              Events::EventType::Quit)
         .value("WINDOWRESIZE",      Events::EventType::WindowResized)
         .value("PIXELSIZECHANGED",  Events::EventType::WindowPixelSizeChanged)
@@ -337,64 +331,61 @@ PYBIND11_MODULE(backend, m) {
         .value("FINGERDOWN",        Events::EventType::FingerDown)
         .value("FINGERUP",          Events::EventType::FingerUp)
         .value("FINGERMOTION",      Events::EventType::FingerMotion)
-        .export_values()
-        .finalize();
+        .export_values();
     
-    py::native_enum<Events::KeyCode>(events, "KeyCode", "enum.IntFlag")
+    py::enum_<Events::KeyCode>(events, "KeyCode", "enum.IntFlag")
         .value("K_ESCAPE", Events::KeyCode::Escape)
         .value("K_F", Events::KeyCode::F)
         .value("K_F11", Events::KeyCode::F11)
-        .export_values()
-        .finalize();
+        .export_values();
     
-    py::native_enum<Events::MouseButton>(events, "MouseButton", "enum.IntFlag")
+    py::enum_<Events::MouseButton>(events, "MouseButton", "enum.IntFlag")
         .value("BUTTON_LEFT", Events::MouseButton::Left)
-        .export_values()
-        .finalize();
+        .export_values();
 
     py::class_<Events::ResizeEvent>(events, "ResizeEvent")
-        .def_readonly("Width", &Events::ResizeEvent::Width)
-        .def_readonly("Height", &Events::ResizeEvent::Height);
+        .def_ro("Width", &Events::ResizeEvent::Width)
+        .def_ro("Height", &Events::ResizeEvent::Height);
     
     py::class_<Events::KeyboardEvent>(events, "KeyboardEvent")
-        .def_readonly("key", &Events::KeyboardEvent::Key);
+        .def_ro("key", &Events::KeyboardEvent::Key);
     
     py::class_<Events::MouseMotionEvent>(events, "MouseMotionEvent")
-        .def_readonly("x", &Events::MouseMotionEvent::X)
-        .def_readonly("y", &Events::MouseMotionEvent::X)
-        .def_readonly("xrel", &Events::MouseMotionEvent::XRelative)
-        .def_readonly("yrel", &Events::MouseMotionEvent::YRelative)
-        .def_property_readonly("pos", &Events::MouseMotionEvent::GetPosition)
-        .def_property_readonly("rel", &Events::MouseMotionEvent::GetRelativePosition);
+        .def_ro("x", &Events::MouseMotionEvent::X)
+        .def_ro("y", &Events::MouseMotionEvent::X)
+        .def_ro("xrel", &Events::MouseMotionEvent::XRelative)
+        .def_ro("yrel", &Events::MouseMotionEvent::YRelative)
+        .def_prop_ro("pos", &Events::MouseMotionEvent::GetPosition)
+        .def_prop_ro("rel", &Events::MouseMotionEvent::GetRelativePosition);
     
     py::class_<Events::MouseButtonEvent>(events, "MouseButtonEvent")
-        .def_readonly("x", &Events::MouseButtonEvent::X)
-        .def_readonly("y", &Events::MouseButtonEvent::Y)
-        .def_readonly("button", &Events::MouseButtonEvent::Button)
-        .def_readonly("touch", &Events::MouseButtonEvent::IsTouch)
-        .def_property_readonly("pos", &Events::MouseButtonEvent::GetPosition);
+        .def_ro("x", &Events::MouseButtonEvent::X)
+        .def_ro("y", &Events::MouseButtonEvent::Y)
+        .def_ro("button", &Events::MouseButtonEvent::Button)
+        .def_ro("touch", &Events::MouseButtonEvent::IsTouch)
+        .def_prop_ro("pos", &Events::MouseButtonEvent::GetPosition);
 
 		py::class_<Events::MouseWheelEvent>(events, "MouseWheelEvent")
-		.def_readonly("horizontal", &Events::MouseWheelEvent::Horizontal)
-		.def_readonly("vertical", &Events::MouseWheelEvent::Vertical)
-		.def_readonly("cursor_x", &Events::MouseWheelEvent::CursorX)
-		.def_readonly("cursor_y", &Events::MouseWheelEvent::CursorY)
-		.def_property_readonly("pos", &Events::MouseWheelEvent::GetPosition);
+		.def_ro("horizontal", &Events::MouseWheelEvent::Horizontal)
+		.def_ro("vertical", &Events::MouseWheelEvent::Vertical)
+		.def_ro("cursor_x", &Events::MouseWheelEvent::CursorX)
+		.def_ro("cursor_y", &Events::MouseWheelEvent::CursorY)
+		.def_prop_ro("pos", &Events::MouseWheelEvent::GetPosition);
     
     py::class_<Events::TouchFingerEvent>(events, "TouchFingerEvent")
-        .def_readonly("x", &Events::TouchFingerEvent::X)
-        .def_readonly("y", &Events::TouchFingerEvent::Y)
-        .def_readonly("touch_id", &Events::TouchFingerEvent::TouchID)
-        .def_readonly("finger_id", &Events::TouchFingerEvent::FingerID);
+        .def_ro("x", &Events::TouchFingerEvent::X)
+        .def_ro("y", &Events::TouchFingerEvent::Y)
+        .def_ro("touch_id", &Events::TouchFingerEvent::TouchID)
+        .def_ro("finger_id", &Events::TouchFingerEvent::FingerID);
     
     py::class_<Events::Event>(events, "Event")
-        .def_readonly("type", &Events::Event::Type)
-        .def_readonly("resize", &Events::Event::Resize)
-        .def_readonly("key", &Events::Event::Key)
-        .def_readonly("motion", &Events::Event::Motion)
-        .def_readonly("button", &Events::Event::Button)
-		.def_readonly("wheel", &Events::Event::Wheel)
-        .def_readonly("tfinger", &Events::Event::Touch);
+        .def_ro("type", &Events::Event::Type)
+        .def_ro("resize", &Events::Event::Resize)
+        .def_ro("key", &Events::Event::Key)
+        .def_ro("motion", &Events::Event::Motion)
+        .def_ro("button", &Events::Event::Button)
+		.def_ro("wheel", &Events::Event::Wheel)
+        .def_ro("tfinger", &Events::Event::Touch);
     
     events.def("get", &Events::Get);
     
@@ -409,11 +400,10 @@ PYBIND11_MODULE(backend, m) {
 
     py::module_ display = m.def_submodule("display");
 
-    py::native_enum<Display::WindowFlags>(display, "WindowFlags", "enum.IntFlag")
+    py::enum_<Display::WindowFlags>(display, "WindowFlags", "enum.IntFlag")
         .value("FULLSCREEN", Display::WindowFlags::Fullscreen)
         .value("BORDERLESS", Display::WindowFlags::Borderless)
-        .export_values()
-        .finalize();
+        .export_values();
     
     display
         .def("init", &Display::Init)
@@ -437,7 +427,7 @@ PYBIND11_MODULE(backend, m) {
     using BlitRectFunc = void (Draw::Texture::*)(const Draw::Texture&, const Rect&);
     using BlitPointFunc = void (Draw::Texture::*)(const Draw::Texture&, const Point&);
 
-	py::native_enum<Draw::BlendModeType>(draw, "Type", "enum.IntEnum")
+	py::enum_<Draw::BlendModeType>(draw, "Type", "enum.IntEnum")
 		.value("none", Draw::BlendModeType::None)
 		.value("alpha", Draw::BlendModeType::Alpha)
 		.value("premultiplied_alpha", Draw::BlendModeType::PremultipliedAlpha)
@@ -447,8 +437,7 @@ PYBIND11_MODULE(backend, m) {
 		.value("multiply", Draw::BlendModeType::Multiply)
 		.value("eraser", Draw::BlendModeType::Eraser)
 		.value("inverse_eraser", Draw::BlendModeType::InverseEraser)
-		.export_values()
-		.finalize();
+		.export_values();
 
     py::class_<Draw::Texture>(draw, "Texture")
         .def(py::init<int, int>())

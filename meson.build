@@ -134,7 +134,7 @@ dependencies += compiler.find_library('dl', required : false)
 boost = dependency('boost', required : true, default_options : 'modules=atomic,stacktrace')
 fmt = dependency('fmt', required : true, default_options : 'header-only=true')
 glm = dependency('glm', required : true)
-pybind11 = dependency('pybind11', required : true)
+pybind11 = dependency('nanobind', required : true)
 sdl3 = dependency('sdl3', required : true)
 sdl3_ttf = dependency('sdl3_ttf', required : true)
 dependencies = [ boost, fmt, glm, pybind11, sdl3, sdl3_ttf ]
